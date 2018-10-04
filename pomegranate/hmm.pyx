@@ -296,7 +296,7 @@ cdef class HiddenMarkovModel(GraphModel):
 
         # Get all the edges from the graph
         edges = []
-        for start, end, data in self.graph.edges_iter(data=True):
+        for start, end, data in self.graph.edges(data=True):
             # If this edge is part of a group of tied edges, annotate this group
             # it is a part of
             s, e = indices[start], indices[end]
@@ -751,7 +751,7 @@ cdef class HiddenMarkovModel(GraphModel):
             merge_count = 0
 
             # Reindex the states based on ones which are still there
-            prestates = self.graph.nodes()
+            prestates = list(self.graph.nodes())
             indices = { prestates[i]: i for i in range(len(prestates)) }
 
             # Go through all the edges, summing in and out edges
@@ -790,8 +790,9 @@ cdef class HiddenMarkovModel(GraphModel):
             for state in self.graph.nodes():
 
                 # Perform log sum exp on the edges to see if they properly sum to 1
-                out_edges = round(sum(numpy.e**x['probability']
-                    for x in self.graph.edge[state].values()), 8)
+                out_edges = round(sum(
+                numpy.e**self.graph.get_edge_data(x[0], x[1])['probability']
+                    for x in self.graph.edges(state)), 8)
 
                 # The end state has no out edges, so will be 0
                 if out_edges != 1. and state != self.end:
@@ -802,8 +803,9 @@ cdef class HiddenMarkovModel(GraphModel):
 
                     # Reweight the edges so that the probability (not logp) sums
                     # to 1.
-                    for edge in self.graph.edge[state].values():
-                        edge['probability'] = edge['probability'] - log(out_edges)
+                    for edge in self.graph.edges(state):
+                        edata = self.graph.get_edge_data(edge[0], edge[1])
+                        edata['probability'] = edata['probability'] - log(out_edges)
 
         # Automatically merge adjacent silent states attached by a single edge
         # of 1.0 probability, as that adds nothing to the model. Traverse the
@@ -895,7 +897,7 @@ cdef class HiddenMarkovModel(GraphModel):
 
         # Get the sorted silent states. Isn't it convenient how NetworkX has
         # exactly the algorithm we need?
-        silent_states_sorted = networkx.topological_sort(silent_subgraph, nbunch=silent_states)
+        silent_states_sorted = networkx.topological_sort(silent_subgraph)
 
         # What's the index of the first silent state?
         self.silent_start = len(normal_states)
@@ -903,7 +905,7 @@ cdef class HiddenMarkovModel(GraphModel):
         # Save the master state ordering. Silent states are last and in
         # topological order, so when calculationg forward algorithm
         # probabilities we can just go down the list of states.
-        self.states = normal_states + silent_states_sorted
+        self.states = normal_states + list(silent_states_sorted)
 
         # We need a good way to get transition probabilities by state index that
         # isn't N^2 to build or store. So we will need a reverse of the above
@@ -991,7 +993,7 @@ cdef class HiddenMarkovModel(GraphModel):
         # such a manner that all edges pointing to the same node are grouped
         # together. This will allow us to run the algorithms in time
         # nodes*edges instead of nodes*nodes.
-        for a, b in self.graph.edges_iter():
+        for a, b in self.graph.edges():
             # Increment the total number of edges going to node b.
             self.in_edge_count[indices[b]+1] += 1
             # Increment the total number of edges leaving node a.
@@ -1015,7 +1017,7 @@ cdef class HiddenMarkovModel(GraphModel):
         # Now we go through the edges again in order to both fill in the
         # transition probability matrix, and also to store the indices sorted
         # by the end-node.
-        for a, b, data in self.graph.edges_iter(data=True):
+        for a, b, data in self.graph.edges(data=True):
             # Put the edge in the dict. Its weight is log-probability
             start = self.in_edge_count[indices[b]]
 
@@ -3248,7 +3250,7 @@ cdef class HiddenMarkovModel(GraphModel):
 
         # Get all the edges from the graph
         edges = []
-        for start, end, data in self.graph.edges_iter(data=True):
+        for start, end, data in self.graph.edges(data=True):
             # If this edge is part of a group of tied edges, annotate this group
             # it is a part of
             s, e = indices[start], indices[end]
