@@ -13,7 +13,7 @@ else:
     use_cython = True
     ext = 'pyx'
 
-filenames = [ 
+filenames = [
     "base",
     "bayes",
     "BayesianNetwork",
@@ -89,7 +89,7 @@ setup(
     install_requires=[
         "numpy >= 1.8.0",
         "joblib >= 0.9.0b4",
-        "networkx >= 1.8.1, < 2.0",
+        "networkx >= 2.0",
         "scipy >= 0.17.0",
         "pyyaml"
     ],
