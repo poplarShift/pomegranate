@@ -113,6 +113,96 @@ def log(value):
         return to_return
     return _log(value)
 
+# Include networkx legacy code as quickfix.
+# mimic import in original code
+import networkx as nx
+def topological_sort(G, nbunch=None, reverse=False):
+    """
+    SEE NOTE! Return a list of nodes in topological sort order.
+
+    A topological sort is a nonunique permutation of the nodes
+    such that an edge from u to v implies that u appears before v in the
+    topological sort order.
+
+    Parameters
+    ----------
+    G : NetworkX digraph
+        A directed graph
+
+    nbunch : container of nodes (optional)
+        Explore graph in specified order given in nbunch
+
+    reverse : bool, optional
+        Return postorder instead of preorder if True.
+        Reverse mode is a bit more efficient.
+
+    Raises
+    ------
+    NetworkXError
+        Topological sort is defined for directed graphs only. If the
+        graph G is undirected, a NetworkXError is raised.
+
+    NetworkXUnfeasible
+        If G is not a directed acyclic graph (DAG) no topological sort
+        exists and a NetworkXUnfeasible exception is raised.
+
+    Notes
+    -----
+    This algorithm is based on a description and proof in
+    The Algorithm Design Manual [1]_ .
+
+    This code was copy-pasted here from networkx1.11 in order to restore the
+    pre networkx2.0-functionality of topological_sort, and thereby enable
+    pomegranate to support the newest networkx version. This is a quickfix and should eventually be done more thoroughly.
+
+    See also
+    --------
+    is_directed_acyclic_graph
+
+    References
+    ----------
+    .. [1] Skiena, S. S. The Algorithm Design Manual  (Springer-Verlag, 1998).
+        http://www.amazon.com/exec/obidos/ASIN/0387948600/ref=ase_thealgorithmrepo/
+    """
+    if not G.is_directed():
+        raise nx.NetworkXError(
+            "Topological sort not defined on undirected graphs.")
+
+    # nonrecursive version
+    seen = set()
+    order = []
+    explored = set()
+
+    if nbunch is None:
+        nbunch = G.nodes_iter()
+    for v in nbunch:     # process all vertices in G
+        if v in explored:
+            continue
+        fringe = [v]   # nodes yet to look at
+        while fringe:
+            w = fringe[-1]  # depth first search
+            if w in explored:  # already looked down this branch
+                fringe.pop()
+                continue
+            seen.add(w)     # mark as seen
+            # Check successors for cycles and for new nodes
+            new_nodes = []
+            for n in G[w]:
+                if n not in explored:
+                    if n in seen:  # CYCLE !!
+                        raise nx.NetworkXUnfeasible("Graph contains a cycle.")
+                    new_nodes.append(n)
+            if new_nodes:   # Add new_nodes to fringe
+                fringe.extend(new_nodes)
+            else:           # No new nodes so w is fully explored
+                explored.add(w)
+                order.append(w)
+                fringe.pop()    # done considering this node
+    if reverse:
+        return order
+    else:
+        return list(reversed(order))
+
 cdef class HiddenMarkovModel(GraphModel):
     """A Hidden Markov Model
 
@@ -791,7 +881,7 @@ cdef class HiddenMarkovModel(GraphModel):
 
                 # Perform log sum exp on the edges to see if they properly sum to 1
                 out_edges = round(sum(
-                numpy.e**self.graph.get_edge_data(x[0], x[1])['probability']
+                numpy.e**self.graph[x[0]][x[1]]['probability']
                     for x in self.graph.edges(state)), 8)
 
                 # The end state has no out edges, so will be 0
@@ -804,7 +894,7 @@ cdef class HiddenMarkovModel(GraphModel):
                     # Reweight the edges so that the probability (not logp) sums
                     # to 1.
                     for edge in self.graph.edges(state):
-                        edata = self.graph.get_edge_data(edge[0], edge[1])
+                        edata = self.graph[edge[0]][edge[1]]
                         edata['probability'] = edata['probability'] - log(out_edges)
 
         # Automatically merge adjacent silent states attached by a single edge
@@ -897,7 +987,8 @@ cdef class HiddenMarkovModel(GraphModel):
 
         # Get the sorted silent states. Isn't it convenient how NetworkX has
         # exactly the algorithm we need?
-        silent_states_sorted = networkx.topological_sort(silent_subgraph)
+        silent_states_sorted = topological_sort(silent_subgraph,
+                                                nbunch=silent_states)
 
         # What's the index of the first silent state?
         self.silent_start = len(normal_states)
@@ -3659,13 +3750,13 @@ cdef class HiddenMarkovModel(GraphModel):
         if end_state:
             end_probabilities = numpy.ones(k) / k
 
-        model = HiddenMarkovModel.from_matrix(transition_matrix, distributions, 
-            start_probabilities, state_names=state_names, name=name, 
+        model = HiddenMarkovModel.from_matrix(transition_matrix, distributions,
+            start_probabilities, state_names=state_names, name=name,
             ends=end_probabilities)
 
-        _, history = model.fit(X, weights=weights, labels=labels, 
-            stop_threshold=stop_threshold, min_iterations=min_iterations, 
-            max_iterations=max_iterations, algorithm=algorithm, 
+        _, history = model.fit(X, weights=weights, labels=labels,
+            stop_threshold=stop_threshold, min_iterations=min_iterations,
+            max_iterations=max_iterations, algorithm=algorithm,
             verbose=verbose, pseudocount=pseudocount,
             transition_pseudocount=transition_pseudocount,
             emission_pseudocount=emission_pseudocount,
